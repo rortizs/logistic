@@ -13,7 +13,16 @@ return new class extends Migration
     {
         Schema::create('pilotos', function (Blueprint $table) {
             $table->id();
+            $table->string('nombre');
+            $table->string('apellido');
+            $table->string('licencia')->unique();
+            $table->string('telefono')->nullable();
+            $table->string('email')->unique()->nullable();
+            $table->enum('estado', ['Activo', 'Inactivo', 'Suspendido'])->default('Activo');
             $table->timestamps();
+            
+            // Indexes for better performance
+            $table->index('estado');
         });
     }
 

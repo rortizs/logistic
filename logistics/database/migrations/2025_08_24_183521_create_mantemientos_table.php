@@ -13,7 +13,20 @@ return new class extends Migration
     {
         Schema::create('mantemientos', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('camion_id')->constrained('camiones')->onDelete('cascade');
+            $table->string('tipo_mantenimiento');
+            $table->text('descripcion')->nullable();
+            $table->date('fecha_programada');
+            $table->date('fecha_realizada')->nullable();
+            $table->decimal('costo', 10, 2)->nullable();
+            $table->enum('estado', ['Programado', 'En Proceso', 'Completado', 'Cancelado'])->default('Programado');
             $table->timestamps();
+            
+            // Indexes for better performance
+            $table->index('estado');
+            $table->index('fecha_programada');
+            $table->index(['camion_id', 'estado']);
+            $table->index('tipo_mantenimiento');
         });
     }
 
