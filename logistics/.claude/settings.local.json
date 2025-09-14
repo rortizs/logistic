@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mysql:*)"
+      "Bash(mysql:*)",
+      "Bash(composer require:*)",
+      "Bash(php artisan filament:install:*)",
+      "Bash(php artisan:*)",
+      "Bash(composer:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
