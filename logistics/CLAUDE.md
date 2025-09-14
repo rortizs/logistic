@@ -3,7 +3,12 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-This is a Laravel 12 logistics management system with truck fleet tracking, driver management, routes, trips, and maintenance scheduling. The application uses MySQL database with stored procedures for complex operations.
+This is a complete Laravel 12 logistics management system with Filament v3 admin panel. Features include truck fleet tracking, driver management, routes, trips, and maintenance scheduling. The application uses MySQL database with stored procedures for complex operations.
+
+**Admin Panel Access:**
+- URL: `/admin`
+- Email: admin@logistics.com
+- Password: password123
 
 ## Development Commands
 
@@ -83,17 +88,34 @@ npm run build
 
 ## Application Structure
 
-### Controllers
-- `ViajeController`: Handles trip completion logic with stored procedure calls for mileage updates
+### Controllers & Resources
+- `CamionController`: CRUD with maintenance verification and status management
+- `PilotoController`: CRUD with availability checking and performance analytics
+- `RutaController`: CRUD with travel time calculations and route optimization
+- `ViajeController`: Enhanced with trip lifecycle management and stored procedure integration
+- `MantenimientoController`: CRUD with scheduling and overdue maintenance tracking
+
+### Filament Resources
+- Complete admin panel with 5 comprehensive resources
+- Advanced forms with validation and smart field interactions
+- Dynamic tables with color-coded badges and status indicators
+- Custom actions for business workflows (start/complete trips, schedule maintenance)
+- Dashboard widgets with key metrics and statistics
 
 ### Models
-- Standard Laravel Eloquent models (User model present)
-- Missing models for core entities (Camion, Piloto, Ruta, Viaje, Mantenimiento)
+- Complete Laravel Eloquent models with relationships and business logic
+- Camion: Truck management with mileage tracking and maintenance alerts
+- Piloto: Driver management with availability and experience tracking
+- Ruta: Route management with efficiency calculations
+- Viaje: Trip management with status tracking and stored procedure integration
+- Mantenimiento: Maintenance scheduling and completion tracking
 
 ### Frontend Stack
+- **Filament v3**: Modern admin panel with comprehensive CRUD operations
 - **Vite**: Asset bundling and hot-reload development
 - **TailwindCSS**: Utility-first CSS framework
 - **Laravel Blade**: Server-side templating
+- **Livewire**: For reactive components in Filament
 
 ### Key Patterns
 - Uses anonymous migration classes (modern Laravel pattern)
