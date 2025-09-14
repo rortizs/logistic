@@ -7,7 +7,8 @@
       "Bash(php artisan:*)",
       "Bash(composer:*)",
       "Bash(curl:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
