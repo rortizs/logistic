@@ -22,3 +22,12 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Documentation and planning files
+*.md
+CLAUDE.md
+planning.md
+FILAMENT_RESOURCES_SUMMARY.md
+
+# Claude Code settings
+.claude/
