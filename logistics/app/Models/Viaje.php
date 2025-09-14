@@ -265,7 +265,7 @@ class Viaje extends Model
      */
     public function getEstaRetrasadoAttribute(): bool
     {
-        if ($this->estado !== self::ESTADO_EN_CURSO) {
+        if ($this->estado !== self::ESTADO_EN_CURSO || !$this->ruta) {
             return false;
         }
 
@@ -287,13 +287,13 @@ class Viaje extends Model
     /**
      * Get trip progress percentage
      */
-    public function getPorcentajeProgresoAttribute(): float
+    public function getPorcentajeProgresoAttribute(): ?float
     {
         if ($this->estado === self::ESTADO_COMPLETADO) {
             return 100;
         }
 
-        if ($this->estado !== self::ESTADO_EN_CURSO) {
+        if ($this->estado !== self::ESTADO_EN_CURSO || !$this->ruta) {
             return 0;
         }
 
@@ -328,7 +328,7 @@ class Viaje extends Model
      */
     public function getTiempoRestanteAttribute(): ?string
     {
-        if ($this->estado !== self::ESTADO_EN_CURSO) {
+        if ($this->estado !== self::ESTADO_EN_CURSO || !$this->ruta) {
             return null;
         }
 

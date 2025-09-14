@@ -20,6 +20,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Carbon\Carbon;
+use Exception;
 
 class ViajeResource extends Resource
 {
@@ -176,7 +177,9 @@ class ViajeResource extends Resource
                 Tables\Columns\TextColumn::make('camion.placa')
                     ->label('Camión')
                     ->searchable()
-                    ->description(fn (Viaje $record): string => "{$record->camion->marca} {$record->camion->modelo}")
+                    ->description(fn (Viaje $record): ?string => 
+                        $record->camion ? "{$record->camion->marca} {$record->camion->modelo}" : null
+                    )
                     ->weight(FontWeight::Medium),
                 
                 Tables\Columns\TextColumn::make('piloto.nombre_completo')
@@ -188,16 +191,23 @@ class ViajeResource extends Resource
                     ->label('Inicio')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
-                    ->description(fn (Viaje $record): ?string => 
-                        $record->esta_en_curso && $record->tiempo_restante 
-                            ? $record->tiempo_restante 
-                            : null
-                    ),
+                    ->description(function (Viaje $record): ?string {
+                        try {
+                            return $record->esta_en_curso && $record->tiempo_restante 
+                                ? $record->tiempo_restante 
+                                : null;
+                        } catch (Exception $e) {
+                            return null;
+                        }
+                    }),
                 
                 Tables\Columns\TextColumn::make('porcentaje_progreso')
                     ->label('Progreso')
-                    ->formatStateUsing(fn (float $state): string => number_format($state, 1) . '%')
-                    ->color(fn (float $state): string => match (true) {
+                    ->formatStateUsing(fn (?float $state): string => 
+                        $state !== null ? number_format($state, 1) . '%' : 'N/D'
+                    )
+                    ->color(fn (?float $state): string => match (true) {
+                        $state === null => 'gray',
                         $state >= 100 => 'success',
                         $state >= 75 => 'info',
                         $state >= 50 => 'warning',
@@ -238,10 +248,20 @@ class ViajeResource extends Resource
                     ->falseIcon('heroicon-o-clock')
                     ->trueColor('danger')
                     ->falseColor('gray')
-                    ->tooltip(fn (Viaje $record) => 
-                        $record->esta_retrasado ? 'Viaje retrasado' : 'En tiempo'
-                    )
-                    ->visible(fn (Viaje $record) => $record->esta_en_curso),
+                    ->tooltip(function (Viaje $record) {
+                        try {
+                            return $record->esta_retrasado ? 'Viaje retrasado' : 'En tiempo';
+                        } catch (Exception $e) {
+                            return 'Estado desconocido';
+                        }
+                    })
+                    ->visible(function (Viaje $record) {
+                        try {
+                            return $record->esta_en_curso;
+                        } catch (Exception $e) {
+                            return false;
+                        }
+                    }),
                 
                 Tables\Columns\TextColumn::make('eficiencia')
                     ->label('Eficiencia')
@@ -342,7 +362,8 @@ class ViajeResource extends Resource
                         ->requiresConfirmation()
                         ->modalHeading('Iniciar Viaje')
                         ->modalDescription(fn (Viaje $record) => 
-                            "¿Iniciar el viaje {$record->ruta->nombre_completo} con {$record->piloto->nombre_completo}?"
+                            "¿Iniciar el viaje " . ($record->ruta ? $record->ruta->nombre_completo : 'sin ruta') . 
+                            " con " . ($record->piloto ? $record->piloto->nombre_completo : 'sin piloto') . "?"
                         )
                         ->action(function (Viaje $record): void {
                             if ($record->iniciar()) {
