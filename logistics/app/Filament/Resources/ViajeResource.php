@@ -177,8 +177,8 @@ class ViajeResource extends Resource
                 Tables\Columns\TextColumn::make('camion.placa')
                     ->label('Camión')
                     ->searchable()
-                    ->description(fn (Viaje $record): ?string => 
-                        $record->camion ? "{$record->camion->marca} {$record->camion->modelo}" : null
+                    ->description(fn (?Viaje $record): ?string => 
+                        $record && $record->camion ? "{$record->camion->marca} {$record->camion->modelo}" : null
                     )
                     ->weight(FontWeight::Medium),
                 
@@ -191,9 +191,9 @@ class ViajeResource extends Resource
                     ->label('Inicio')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
-                    ->description(function (Viaje $record): ?string {
+                    ->description(function (?Viaje $record): ?string {
                         try {
-                            return $record->esta_en_curso && $record->tiempo_restante 
+                            return $record && $record->esta_en_curso && $record->tiempo_restante 
                                 ? $record->tiempo_restante 
                                 : null;
                         } catch (Exception $e) {
@@ -248,16 +248,16 @@ class ViajeResource extends Resource
                     ->falseIcon('heroicon-o-clock')
                     ->trueColor('danger')
                     ->falseColor('gray')
-                    ->tooltip(function (Viaje $record) {
+                    ->tooltip(function (?Viaje $record) {
                         try {
-                            return $record->esta_retrasado ? 'Viaje retrasado' : 'En tiempo';
+                            return $record && $record->esta_retrasado ? 'Viaje retrasado' : 'En tiempo';
                         } catch (Exception $e) {
                             return 'Estado desconocido';
                         }
                     })
-                    ->visible(function (Viaje $record) {
+                    ->visible(function (?Viaje $record) {
                         try {
-                            return $record->esta_en_curso;
+                            return $record && $record->esta_en_curso;
                         } catch (Exception $e) {
                             return false;
                         }
@@ -366,8 +366,8 @@ class ViajeResource extends Resource
                             " con " . ($record->piloto ? $record->piloto->nombre_completo : 'sin piloto') . "?" 
                             : 'Sin información del viaje'
                         )
-                        ->action(function (Viaje $record): void {
-                            if ($record->iniciar()) {
+                        ->action(function (?Viaje $record): void {
+                            if ($record && $record->iniciar()) {
                                 Notification::make()
                                     ->title('Viaje iniciado')
                                     ->success()
@@ -396,8 +396,8 @@ class ViajeResource extends Resource
                                     "Kilometraje inicial: {$record->kilometraje_inicial} km" : ''
                                 ),
                         ])
-                        ->action(function (Viaje $record, array $data): void {
-                            if ($record->completar($data['kilometraje_final'])) {
+                        ->action(function (?Viaje $record, array $data): void {
+                            if ($record && $record->completar($data['kilometraje_final'])) {
                                 Notification::make()
                                     ->title('Viaje completado')
                                     ->success()
@@ -418,8 +418,8 @@ class ViajeResource extends Resource
                         ->requiresConfirmation()
                         ->modalHeading('Cancelar Viaje')
                         ->modalDescription('Esta acción no se puede deshacer.')
-                        ->action(function (Viaje $record): void {
-                            if ($record->cancelar()) {
+                        ->action(function (?Viaje $record): void {
+                            if ($record && $record->cancelar()) {
                                 Notification::make()
                                     ->title('Viaje cancelado')
                                     ->success()
@@ -449,11 +449,13 @@ class ViajeResource extends Resource
                                 ->native(false),
                         ])
                         ->action(function (Collection $records, array $data): void {
-                            $records->each(function (Viaje $record) use ($data) {
-                                if ($data['estado'] === Viaje::ESTADO_CANCELADO) {
-                                    $record->cancelar();
-                                } else {
-                                    $record->update(['estado' => $data['estado']]);
+                            $records->each(function (?Viaje $record) use ($data) {
+                                if ($record) {
+                                    if ($data['estado'] === Viaje::ESTADO_CANCELADO) {
+                                        $record->cancelar();
+                                    } else {
+                                        $record->update(['estado' => $data['estado']]);
+                                    }
                                 }
                             });
                             
