@@ -352,18 +352,19 @@ class ViajeResource extends Resource
                     
                     Tables\Actions\EditAction::make()
                         ->icon('heroicon-o-pencil')
-                        ->visible(fn (Viaje $record) => !$record->esta_completado),
+                        ->visible(fn (?Viaje $record) => $record && !$record->esta_completado),
                     
                     Tables\Actions\Action::make('iniciar')
                         ->label('Iniciar Viaje')
                         ->icon('heroicon-o-play')
                         ->color('success')
-                        ->visible(fn (Viaje $record) => $record->estado === Viaje::ESTADO_PROGRAMADO)
+                        ->visible(fn (?Viaje $record) => $record && $record->estado === Viaje::ESTADO_PROGRAMADO)
                         ->requiresConfirmation()
                         ->modalHeading('Iniciar Viaje')
-                        ->modalDescription(fn (Viaje $record) => 
+                        ->modalDescription(fn (?Viaje $record) => $record ?
                             "¿Iniciar el viaje " . ($record->ruta ? $record->ruta->nombre_completo : 'sin ruta') . 
-                            " con " . ($record->piloto ? $record->piloto->nombre_completo : 'sin piloto') . "?"
+                            " con " . ($record->piloto ? $record->piloto->nombre_completo : 'sin piloto') . "?" 
+                            : 'Sin información del viaje'
                         )
                         ->action(function (Viaje $record): void {
                             if ($record->iniciar()) {
@@ -383,16 +384,16 @@ class ViajeResource extends Resource
                         ->label('Completar')
                         ->icon('heroicon-o-check')
                         ->color('success')
-                        ->visible(fn (Viaje $record) => $record->estado === Viaje::ESTADO_EN_CURSO)
+                        ->visible(fn (?Viaje $record) => $record && $record->estado === Viaje::ESTADO_EN_CURSO)
                         ->form([
                             Forms\Components\TextInput::make('kilometraje_final')
                                 ->label('Kilometraje Final')
                                 ->required()
                                 ->numeric()
-                                ->minValue(fn (Viaje $record) => $record->kilometraje_inicial)
+                                ->minValue(fn (?Viaje $record) => $record ? $record->kilometraje_inicial : 0)
                                 ->suffix('km')
-                                ->helperText(fn (Viaje $record) => 
-                                    "Kilometraje inicial: {$record->kilometraje_inicial} km"
+                                ->helperText(fn (?Viaje $record) => $record ?
+                                    "Kilometraje inicial: {$record->kilometraje_inicial} km" : ''
                                 ),
                         ])
                         ->action(function (Viaje $record, array $data): void {
@@ -413,7 +414,7 @@ class ViajeResource extends Resource
                         ->label('Cancelar')
                         ->icon('heroicon-o-x-mark')
                         ->color('danger')
-                        ->visible(fn (Viaje $record) => !$record->esta_completado)
+                        ->visible(fn (?Viaje $record) => $record && !$record->esta_completado)
                         ->requiresConfirmation()
                         ->modalHeading('Cancelar Viaje')
                         ->modalDescription('Esta acción no se puede deshacer.')
