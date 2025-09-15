@@ -265,12 +265,12 @@ class Viaje extends Model
      */
     public function getEstaRetrasadoAttribute(): bool
     {
-        if ($this->estado !== self::ESTADO_EN_CURSO || !$this->ruta) {
+        if ($this->estado !== self::ESTADO_EN_CURSO || !$this->ruta || !$this->ruta->tiempo_estimado_horas) {
             return false;
         }
 
         $tiempoEstimadoLlegada = $this->fecha_inicio->copy()
-            ->addHours($this->ruta->tiempo_estimado_horas);
+            ->addHours((float) $this->ruta->tiempo_estimado_horas);
 
         return Carbon::now()->isAfter($tiempoEstimadoLlegada);
     }
@@ -278,10 +278,14 @@ class Viaje extends Model
     /**
      * Get estimated arrival time
      */
-    public function getHoraEstimadaLlegadaAttribute(): Carbon
+    public function getHoraEstimadaLlegadaAttribute(): ?Carbon
     {
+        if (!$this->ruta || !$this->ruta->tiempo_estimado_horas) {
+            return null;
+        }
+        
         return $this->fecha_inicio->copy()
-            ->addHours($this->ruta->tiempo_estimado_horas);
+            ->addHours((float) $this->ruta->tiempo_estimado_horas);
     }
 
     /**
@@ -298,7 +302,7 @@ class Viaje extends Model
         }
 
         $tiempoTranscurrido = $this->fecha_inicio->diffInHours(Carbon::now(), true);
-        $tiempoEstimadoTotal = $this->ruta->tiempo_estimado_horas;
+        $tiempoEstimadoTotal = (float) $this->ruta->tiempo_estimado_horas;
 
         if ($tiempoEstimadoTotal <= 0) {
             return 0;
@@ -320,7 +324,7 @@ class Viaje extends Model
             return null;
         }
 
-        return round(($this->ruta->tiempo_estimado_horas / $this->duracion_horas) * 100, 2);
+        return round(((float) $this->ruta->tiempo_estimado_horas / $this->duracion_horas) * 100, 2);
     }
 
     /**
@@ -333,6 +337,10 @@ class Viaje extends Model
         }
 
         $horaEstimadaLlegada = $this->hora_estimada_llegada;
+        if (!$horaEstimadaLlegada) {
+            return null;
+        }
+        
         $ahora = Carbon::now();
 
         if ($ahora->isAfter($horaEstimadaLlegada)) {
