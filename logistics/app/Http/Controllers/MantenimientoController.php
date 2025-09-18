@@ -757,4 +757,85 @@ class MantenimientoController extends Controller
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
+
+    /**
+     * Verify if a truck needs maintenance using stored procedure
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function verificarMantenimientoCamion(Request $request)
+    {
+        // Validate request
+        $request->validate([
+            'camion_id' => 'required|integer|exists:camiones,id'
+        ]);
+
+        try {
+            $camionId = $request->camion_id;
+
+            // Call stored procedure to get comprehensive maintenance information
+            $results = DB::select('CALL VerificarMantenimientoPendiente(?)', [$camionId]);
+
+            if (empty($results)) {
+                throw new Exception('No se obtuvo respuesta del stored procedure');
+            }
+
+            $result = $results[0];
+
+            // Check if stored procedure returned an error
+            if ($result->status === 'ERROR') {
+                throw new Exception($result->mensaje);
+            }
+
+            // Parse JSON responses from stored procedure
+            $camionInfo = json_decode($result->camion_info, true);
+            $mantenimientoInfo = json_decode($result->mantenimiento_info, true);
+
+            // If maintenance is needed, check if there are already scheduled maintenance records
+            if ($mantenimientoInfo['mantenimiento_necesario'] && $mantenimientoInfo['mantenimientos_pendientes'] == 0) {
+                // Create automatic maintenance suggestion
+                $sugerenciaMantenimiento = [
+                    'sugerido' => true,
+                    'tipo_sugerido' => 'Mantenimiento Preventivo',
+                    'fecha_sugerida' => Carbon::now()->addDays(3)->format('Y-m-d'),
+                    'motivo' => 'Kilometraje alcanzado (' . $mantenimientoInfo['km_desde_ultimo_mantenimiento'] . ' km desde el último mantenimiento)',
+                    'urgencia' => $mantenimientoInfo['km_hasta_proximo_mantenimiento'] <= 0 ? 'Urgente' : 'Normal'
+                ];
+            } else {
+                $sugerenciaMantenimiento = [
+                    'sugerido' => false,
+                    'motivo' => $mantenimientoInfo['mantenimientos_pendientes'] > 0 ?
+                        'Ya tiene mantenimientos programados' : 'Mantenimiento al día'
+                ];
+            }
+
+            Log::info('Maintenance verification for truck completed via stored procedure', [
+                'camion_id' => $camionId,
+                'mantenimiento_necesario' => $mantenimientoInfo['mantenimiento_necesario'],
+                'km_hasta_proximo' => $mantenimientoInfo['km_hasta_proximo_mantenimiento'],
+                'mantenimientos_pendientes' => $mantenimientoInfo['mantenimientos_pendientes'],
+                'user_id' => Auth::id()
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'camion' => $camionInfo,
+                    'mantenimiento' => $mantenimientoInfo,
+                    'sugerencia_mantenimiento' => $sugerenciaMantenimiento,
+                    'mensaje' => $result->mensaje
+                ],
+                'message' => 'Verificación de mantenimiento completada exitosamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error in MantenimientoController@verificarMantenimientoCamion: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
 }

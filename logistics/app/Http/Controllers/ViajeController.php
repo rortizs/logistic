@@ -754,4 +754,237 @@ class ViajeController extends Controller
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
+
+    /**
+     * Generate comprehensive trip report using stored procedure
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function generarReporte(Request $request)
+    {
+        // Validate request
+        $request->validate([
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date|after_or_equal:fecha_inicio'
+        ], [
+            'fecha_inicio.required' => 'La fecha de inicio es obligatoria',
+            'fecha_fin.required' => 'La fecha de fin es obligatoria',
+            'fecha_fin.after_or_equal' => 'La fecha de fin debe ser igual o posterior a la fecha de inicio'
+        ]);
+
+        try {
+            $fechaInicio = $request->fecha_inicio;
+            $fechaFin = $request->fecha_fin;
+
+            // Call stored procedure to generate comprehensive trip report
+            $results = DB::select('CALL GenerarReporteViajes(?, ?)', [$fechaInicio, $fechaFin]);
+
+            if (empty($results)) {
+                throw new Exception('No se obtuvo respuesta del stored procedure');
+            }
+
+            // The stored procedure returns multiple result sets:
+            // 1. Summary information
+            // 2. Detailed trip information
+            // 3. Statistics by status
+            // 4. Statistics by truck
+            // 5. Statistics by driver
+
+            // Process results - Laravel returns all result sets as a flat array
+            $processedResults = [];
+            $currentSection = 'resumen';
+
+            foreach ($results as $row) {
+                // Check for section headers
+                if (isset($row->tipo_reporte)) {
+                    $currentSection = strtolower(str_replace('ESTADISTICAS_POR_', '', $row->tipo_reporte));
+                    unset($row->tipo_reporte);
+                    if (!isset($processedResults[$currentSection])) {
+                        $processedResults[$currentSection] = [];
+                    }
+                    $processedResults[$currentSection][] = $row;
+                } else {
+                    // Main report data
+                    if (!isset($processedResults[$currentSection])) {
+                        $processedResults[$currentSection] = [];
+                    }
+
+                    // Parse JSON fields if they exist
+                    if (isset($row->resumen_periodo)) {
+                        $row->resumen_periodo = json_decode($row->resumen_periodo, true);
+                    }
+
+                    $processedResults[$currentSection][] = $row;
+                }
+            }
+
+            // Extract summary information if available
+            $resumenPeriodo = null;
+            if (isset($processedResults['resumen'][0]->resumen_periodo)) {
+                $resumenPeriodo = $processedResults['resumen'][0]->resumen_periodo;
+            }
+
+            Log::info('Trip report generated via stored procedure', [
+                'fecha_inicio' => $fechaInicio,
+                'fecha_fin' => $fechaFin,
+                'total_results' => count($results),
+                'user_id' => Auth::id()
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'periodo' => [
+                        'fecha_inicio' => $fechaInicio,
+                        'fecha_fin' => $fechaFin,
+                        'dias_periodo' => Carbon::parse($fechaFin)->diffInDays(Carbon::parse($fechaInicio)) + 1
+                    ],
+                    'resumen_general' => $resumenPeriodo,
+                    'viajes_detallados' => $processedResults['resumen'] ?? [],
+                    'estadisticas_por_estado' => $processedResults['estado'] ?? [],
+                    'estadisticas_por_camion' => $processedResults['camion'] ?? [],
+                    'estadisticas_por_piloto' => $processedResults['piloto'] ?? [],
+                    'total_secciones' => count($processedResults),
+                    'fecha_generacion' => Carbon::now()->format('Y-m-d H:i:s')
+                ],
+                'message' => 'Reporte de viajes generado exitosamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error in ViajeController@generarReporte: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Generate trip report in specific format (PDF, Excel, etc.)
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function exportarReporte(Request $request)
+    {
+        // Validate request
+        $request->validate([
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date|after_or_equal:fecha_inicio',
+            'formato' => 'required|in:json,csv,excel',
+            'incluir_detalle' => 'boolean'
+        ]);
+
+        try {
+            // Get report data using our stored procedure method
+            $reportRequest = new Request([
+                'fecha_inicio' => $request->fecha_inicio,
+                'fecha_fin' => $request->fecha_fin
+            ]);
+
+            $reportResponse = $this->generarReporte($reportRequest);
+            $reportData = json_decode($reportResponse->getContent(), true);
+
+            if ($reportData['status'] !== 'success') {
+                throw new Exception('Error generating base report data');
+            }
+
+            $data = $reportData['data'];
+            $incluirDetalle = $request->get('incluir_detalle', true);
+
+            switch ($request->formato) {
+                case 'csv':
+                    return $this->exportarCSV($data, $incluirDetalle);
+                case 'excel':
+                    return $this->exportarExcel($data, $incluirDetalle);
+                case 'json':
+                default:
+                    return response()->json($reportData);
+            }
+
+        } catch (Exception $e) {
+            Log::error('Error in ViajeController@exportarReporte: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Export report data to CSV format
+     */
+    private function exportarCSV($data, $incluirDetalle)
+    {
+        $filename = 'reporte_viajes_' . $data['periodo']['fecha_inicio'] . '_' . $data['periodo']['fecha_fin'] . '.csv';
+
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        $callback = function() use ($data, $incluirDetalle) {
+            $file = fopen('php://output', 'w');
+
+            // Add UTF-8 BOM for proper Excel encoding
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+
+            // Header information
+            fputcsv($file, ['REPORTE DE VIAJES']);
+            fputcsv($file, ['Período:', $data['periodo']['fecha_inicio'] . ' al ' . $data['periodo']['fecha_fin']]);
+            fputcsv($file, ['Generado:', $data['fecha_generacion']]);
+            fputcsv($file, []);
+
+            // Summary statistics
+            if (isset($data['resumen_general'])) {
+                fputcsv($file, ['RESUMEN GENERAL']);
+                foreach ($data['resumen_general'] as $key => $value) {
+                    fputcsv($file, [ucfirst(str_replace('_', ' ', $key)), $value]);
+                }
+                fputcsv($file, []);
+            }
+
+            // Detailed trips if requested
+            if ($incluirDetalle && !empty($data['viajes_detallados'])) {
+                fputcsv($file, ['DETALLE DE VIAJES']);
+                fputcsv($file, [
+                    'ID Viaje', 'Estado', 'Fecha', 'Camión', 'Piloto', 'Ruta',
+                    'KM Inicial', 'KM Final', 'KM Recorridos', 'Horas Viaje', 'Evaluación'
+                ]);
+
+                foreach ($data['viajes_detallados'] as $viaje) {
+                    fputcsv($file, [
+                        $viaje->viaje_id ?? '',
+                        $viaje->viaje_estado ?? '',
+                        $viaje->fecha_viaje ?? '',
+                        $viaje->camion_placa ?? '',
+                        $viaje->piloto_nombre ?? '',
+                        $viaje->ruta_descripcion ?? '',
+                        $viaje->kilometraje_inicial ?? '',
+                        $viaje->kilometraje_final ?? '',
+                        $viaje->km_recorridos ?? '',
+                        $viaje->horas_viaje ?? '',
+                        $viaje->evaluacion_kilometraje ?? ''
+                    ]);
+                }
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Export report data to Excel format (simple CSV with Excel headers)
+     */
+    private function exportarExcel($data, $incluirDetalle)
+    {
+        // For now, return CSV with Excel-friendly headers
+        // In a real implementation, you might use Laravel Excel package
+        return $this->exportarCSV($data, $incluirDetalle);
+    }
 }

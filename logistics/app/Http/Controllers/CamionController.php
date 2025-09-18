@@ -667,4 +667,86 @@ class CamionController extends Controller
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
+
+    /**
+     * Check maintenance status using stored procedure - comprehensive maintenance verification
+     *
+     * @param Camion $camion
+     * @param Request $request
+     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+     */
+    public function verificarMantenimientoCompleto(Camion $camion, Request $request)
+    {
+        try {
+            // Call stored procedure to get comprehensive maintenance information
+            $results = DB::select('CALL VerificarMantenimientoPendiente(?)', [$camion->id]);
+
+            if (empty($results)) {
+                throw new Exception('No se obtuvo respuesta del stored procedure');
+            }
+
+            $result = $results[0];
+
+            // Check if stored procedure returned an error
+            if ($result->status === 'ERROR') {
+                throw new Exception($result->mensaje);
+            }
+
+            // Parse JSON responses from stored procedure
+            $camionInfo = json_decode($result->camion_info, true);
+            $mantenimientoInfo = json_decode($result->mantenimiento_info, true);
+
+            Log::info('Maintenance verification completed via stored procedure', [
+                'camion_id' => $camion->id,
+                'mantenimiento_necesario' => $mantenimientoInfo['mantenimiento_necesario'],
+                'km_hasta_proximo' => $mantenimientoInfo['km_hasta_proximo_mantenimiento'],
+                'user_id' => Auth::id()
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => 'success',
+                    'data' => [
+                        'camion' => $camionInfo,
+                        'mantenimiento' => $mantenimientoInfo,
+                        'mensaje' => $result->mensaje
+                    ],
+                    'message' => 'Verificación de mantenimiento completada exitosamente'
+                ]);
+            }
+
+            // Create status message for web response
+            $alertLevel = 'info';
+            $alertMessage = $mantenimientoInfo['alerta'];
+
+            if ($mantenimientoInfo['mantenimiento_necesario']) {
+                $alertLevel = 'error';
+            } elseif (strpos($mantenimientoInfo['alerta'], 'ADVERTENCIA') !== false) {
+                $alertLevel = 'warning';
+            } elseif (strpos($mantenimientoInfo['alerta'], 'INFO') !== false) {
+                $alertLevel = 'info';
+            } else {
+                $alertLevel = 'success';
+            }
+
+            return redirect()->back()
+                ->with($alertLevel, $alertMessage)
+                ->with('maintenance_data', [
+                    'camion' => $camionInfo,
+                    'mantenimiento' => $mantenimientoInfo
+                ]);
+
+        } catch (Exception $e) {
+            Log::error('Error in CamionController@verificarMantenimientoCompleto: ' . $e->getMessage());
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $e->getMessage()
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+
+            return redirect()->back()->with('error', 'Error al verificar el estado de mantenimiento: ' . $e->getMessage());
+        }
+    }
 }
